@@ -150,6 +150,11 @@ public static class RelationalAnnotationNames
     public const string IsTableExcludedFromMigrations = Prefix + "IsTableExcludedFromMigrations";
 
     /// <summary>
+    ///     The name for the annotation determining whether the inherited properties are mapped to the same table as the derived ones.
+    /// </summary>
+    public const string HasInheritedPropertyMapping = Prefix + "HasInheritedPropertyMapping";    
+
+    /// <summary>
     ///     The name for database model annotation.
     /// </summary>
     public const string RelationalModel = Prefix + "RelationalModel";

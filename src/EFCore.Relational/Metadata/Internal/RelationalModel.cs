@@ -258,6 +258,8 @@ public class RelationalModel : Annotatable, IRelationalModel
             IsSharedTablePrincipal = true, IsSplitEntityTypePrincipal = true
         };
 
+        // Detect TPT and TPC
+
         foreach (var property in entityType.GetProperties())
         {
             var columnName = property.GetColumnBaseName();
@@ -312,89 +314,90 @@ public class RelationalModel : Annotatable, IRelationalModel
     private static void AddTables(RelationalModel databaseModel, IEntityType entityType)
     {
         var tableName = entityType.GetTableName();
-        if (tableName != null)
+        if (tableName == null)
         {
-            var schema = entityType.GetSchema();
-            var mappedType = entityType;
-            List<TableMapping>? tableMappings = null;
-            while (mappedType != null)
+            return;
+        }
+
+        var schema = entityType.GetSchema();
+        var mappedType = entityType;
+
+        Check.DebugAssert(entityType.FindRuntimeAnnotationValue(RelationalAnnotationNames.TableMappings) == null, "not null");
+        var tableMappings = new List<TableMapping>();
+        entityType.SetRuntimeAnnotation(RelationalAnnotationNames.TableMappings, tableMappings);
+
+        var inheritedPropertiesMapped = entityType.HasInheritedPropertyMapping() ?? false;
+        while (mappedType != null)
+        {
+            var mappedTableName = mappedType.GetTableName();
+            var mappedSchema = mappedType.GetSchema();
+
+            if (mappedTableName == null
+                || (mappedTableName == tableName
+                    && mappedSchema == schema
+                    && mappedType != entityType))
             {
-                var mappedTableName = mappedType.GetTableName();
-                var mappedSchema = mappedType.GetSchema();
-
-                if (mappedTableName == null
-                    || (mappedTableName == tableName
-                        && mappedSchema == schema
-                        && mappedType != entityType))
-                {
-                    break;
-                }
-
-                var mappedTable = StoreObjectIdentifier.Table(mappedTableName, mappedSchema);
-                if (!databaseModel.Tables.TryGetValue((mappedTableName, mappedSchema), out var table))
-                {
-                    table = new Table(mappedTableName, mappedSchema, databaseModel);
-                    databaseModel.Tables.Add((mappedTableName, mappedSchema), table);
-                }
-
-                var tableMapping = new TableMapping(entityType, table, includesDerivedTypes: mappedType == entityType)
-                {
-                    IsSplitEntityTypePrincipal = true
-                };
-                foreach (var property in mappedType.GetProperties())
-                {
-                    var columnName = property.GetColumnName(mappedTable);
-                    if (columnName == null)
-                    {
-                        continue;
-                    }
-
-                    var column = (Column?)table.FindColumn(columnName);
-                    if (column == null)
-                    {
-                        column = new Column(columnName, property.GetColumnType(mappedTable), table);
-                        column.IsNullable = property.IsColumnNullable(mappedTable);
-                        table.Columns.Add(columnName, column);
-                    }
-                    else if (!property.IsColumnNullable(mappedTable))
-                    {
-                        column.IsNullable = false;
-                    }
-
-                    var columnMapping = new ColumnMapping(property, column, tableMapping);
-                    tableMapping.ColumnMappings.Add(columnMapping);
-                    column.PropertyMappings.Add(columnMapping);
-
-                    if (property.FindRuntimeAnnotationValue(RelationalAnnotationNames.TableColumnMappings)
-                        is not SortedSet<ColumnMapping> columnMappings)
-                    {
-                        columnMappings = new SortedSet<ColumnMapping>(ColumnMappingBaseComparer.Instance);
-                        property.AddRuntimeAnnotation(RelationalAnnotationNames.TableColumnMappings, columnMappings);
-                    }
-
-                    columnMappings.Add(columnMapping);
-                }
-
-                mappedType = mappedType.BaseType;
-
-                tableMappings = entityType.FindRuntimeAnnotationValue(RelationalAnnotationNames.TableMappings)
-                    as List<TableMapping>;
-                if (tableMappings == null)
-                {
-                    tableMappings = new List<TableMapping>();
-                    entityType.AddRuntimeAnnotation(RelationalAnnotationNames.TableMappings, tableMappings);
-                }
-
-                if (tableMapping.ColumnMappings.Count != 0
-                    || tableMappings.Count == 0)
-                {
-                    tableMappings.Add(tableMapping);
-                    table.EntityTypeMappings.Add(tableMapping);
-                }
+                break;
             }
 
-            tableMappings?.Reverse();
+            if (!databaseModel.Tables.TryGetValue((mappedTableName, mappedSchema), out var table))
+            {
+                table = new Table(mappedTableName, mappedSchema, databaseModel);
+                databaseModel.Tables.Add((mappedTableName, mappedSchema), table);
+            }
+
+            var mappedTable = StoreObjectIdentifier.Table(mappedTableName, mappedSchema);
+            var tableMapping = new TableMapping(entityType, table, includesDerivedTypes: !inheritedPropertiesMapped && mappedType == entityType)
+            {
+                IsSplitEntityTypePrincipal = true
+            };
+            foreach (var property in mappedType.GetProperties())
+            {
+                var columnName = property.GetColumnName(mappedTable);
+                if (columnName == null)
+                {
+                    continue;
+                }
+
+                var column = (Column?)table.FindColumn(columnName);
+                if (column == null)
+                {
+                    column = new(columnName, property.GetColumnType(mappedTable), table)
+                    {
+                        IsNullable = property.IsColumnNullable(mappedTable)
+                    };
+                    table.Columns.Add(columnName, column);
+                }
+                else if (!property.IsColumnNullable(mappedTable))
+                {
+                    column.IsNullable = false;
+                }
+
+                var columnMapping = new ColumnMapping(property, column, tableMapping);
+                tableMapping.ColumnMappings.Add(columnMapping);
+                column.PropertyMappings.Add(columnMapping);
+
+                if (property.FindRuntimeAnnotationValue(RelationalAnnotationNames.TableColumnMappings)
+                    is not SortedSet<ColumnMapping> columnMappings)
+                {
+                    columnMappings = new SortedSet<ColumnMapping>(ColumnMappingBaseComparer.Instance);
+                    property.AddRuntimeAnnotation(RelationalAnnotationNames.TableColumnMappings, columnMappings);
+                }
+
+                columnMappings.Add(columnMapping);
+            }
+                        
+            mappedType = inheritedPropertiesMapped ? null : mappedType.BaseType;
+
+            if (tableMapping.ColumnMappings.Count != 0
+                || tableMappings.Count == 0)
+            {
+                tableMappings.Add(tableMapping);
+                table.EntityTypeMappings.Add(tableMapping);
+            }
         }
+
+        tableMappings?.Reverse();
     }
 
     private static void AddViews(RelationalModel databaseModel, IEntityType entityType)
@@ -406,8 +409,13 @@ public class RelationalModel : Annotatable, IRelationalModel
         }
 
         var schema = entityType.GetViewSchema();
-        List<ViewMapping>? viewMappings = null;
         var mappedType = entityType;
+
+        Check.DebugAssert(entityType.FindRuntimeAnnotationValue(RelationalAnnotationNames.ViewMappings) == null, "not null");
+        var viewMappings = new List<ViewMapping>();
+        entityType.SetRuntimeAnnotation(RelationalAnnotationNames.ViewMappings, viewMappings);
+
+        var inheritedPropertiesMapped = entityType.HasInheritedPropertyMapping() ?? false;
         while (mappedType != null)
         {
             var mappedViewName = mappedType.GetViewName();
@@ -428,7 +436,7 @@ public class RelationalModel : Annotatable, IRelationalModel
             }
 
             var mappedView = StoreObjectIdentifier.View(mappedViewName, mappedSchema);
-            var viewMapping = new ViewMapping(entityType, view, includesDerivedTypes: mappedType == entityType)
+            var viewMapping = new ViewMapping(entityType, view, includesDerivedTypes: !inheritedPropertiesMapped && mappedType == entityType)
             {
                 IsSplitEntityTypePrincipal = true
             };
@@ -466,14 +474,7 @@ public class RelationalModel : Annotatable, IRelationalModel
                 columnMappings.Add(columnMapping);
             }
 
-            mappedType = mappedType.BaseType;
-
-            viewMappings = entityType.FindRuntimeAnnotationValue(RelationalAnnotationNames.ViewMappings) as List<ViewMapping>;
-            if (viewMappings == null)
-            {
-                viewMappings = new List<ViewMapping>();
-                entityType.AddRuntimeAnnotation(RelationalAnnotationNames.ViewMappings, viewMappings);
-            }
+            mappedType = inheritedPropertiesMapped ? null : mappedType.BaseType;
 
             if (viewMapping.ColumnMappings.Count != 0
                 || viewMappings.Count == 0)
@@ -770,9 +771,11 @@ public class RelationalModel : Annotatable, IRelationalModel
                 {
                     if (firstPrincipalMapping
                         && !principalMapping.IncludesDerivedTypes
-                        && foreignKey.PrincipalEntityType.GetDirectlyDerivedTypes().Any())
+                        && foreignKey.PrincipalEntityType.GetDirectlyDerivedTypes().Any(e => e.GetTableMappings().Any()))
                     {
                         // Derived principal entity types are mapped to different tables, so the constraint is not enforceable
+                        // Allow this to be overriden #15854
+                        // TODO: Log a warning
                         break;
                     }
 

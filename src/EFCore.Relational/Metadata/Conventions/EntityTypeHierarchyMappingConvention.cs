@@ -49,6 +49,12 @@ public class EntityTypeHierarchyMappingConvention : IModelFinalizingConvention
                 continue;
             }
 
+            if (entityType.HasInheritedPropertyMapping() != null)
+            {
+                nonTphRoots.Add(entityType.GetRootType());
+                continue;
+            }
+
             var tableName = entityType.GetTableName();
             var schema = entityType.GetSchema();
             if (tableName != null

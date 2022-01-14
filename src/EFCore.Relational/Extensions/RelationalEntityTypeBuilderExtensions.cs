@@ -16,6 +16,50 @@ namespace Microsoft.EntityFrameworkCore;
 public static class RelationalEntityTypeBuilderExtensions
 {
     /// <summary>
+    ///     Configures the mapping type for the inherited properties.
+    ///     Calling this with <see langword="true"/> or without an argument means that the properties from the base entity type
+    ///     will be mapped to the same database object as the properties declared on each derived type (TPC).
+    ///     Calling this with <see langword="false"/> means that the properties from the base entity type
+    ///     will be mapped to a different database object than the properties declared on the derived types
+    ///     (TPT, the default when the base entity type is mapped to a different table).
+    ///     Calling this with <see langword="null"/> means that the properties from the base entity type and all the derived entity types
+    ///     will be mapped to the same database object (TPH).
+    /// </summary>
+    /// <remarks>
+    ///     See <see href="https://aka.ms/efcore-docs-migrations">Database migrations</see> for more information and examples.
+    /// </remarks>
+    /// <param name="entityTypeBuilder">The builder for the entity type being configured.</param>
+    /// <param name="inherit">A value indicating whether the inherited properties should be mapped to this table.</param>
+    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
+    public static EntityTypeBuilder MapInheritedProperties(this EntityTypeBuilder entityTypeBuilder, bool? inherit = true)
+    {
+        entityTypeBuilder.Metadata.SetInheritedPropertyMapping(inherit);
+
+        return entityTypeBuilder;
+    }
+
+    /// <summary>
+    ///     Configures the mapping type for the inherited properties.
+    ///     Calling this with <see langword="true"/> or without an argument means that the properties from the base entity type
+    ///     will be mapped to the same database object as the properties declared on each derived type (TPC).
+    ///     Calling this with <see langword="false"/> means that the properties from the base entity type
+    ///     will be mapped to a different database object than the properties declared on the derived types
+    ///     (TPT, the default when the base entity type is mapped to a different table).
+    ///     Calling this with <see langword="null"/> means that the properties from the base entity type and all the derived entity types
+    ///     will be mapped to the same database object (TPH).
+    /// </summary>
+    /// <remarks>
+    ///     See <see href="https://aka.ms/efcore-docs-migrations">Database migrations</see> for more information and examples.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being configured.</typeparam>
+    /// <param name="entityTypeBuilder">The builder for the entity type being configured.</param>
+    /// <param name="inherit">A value indicating whether the inherited properties should be mapped to this table.</param>
+    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
+    public static EntityTypeBuilder<TEntity> MapInheritedProperties<TEntity>(this EntityTypeBuilder<TEntity> entityTypeBuilder, bool? inherit = true)
+        where TEntity : class
+        => (EntityTypeBuilder<TEntity>)((EntityTypeBuilder)entityTypeBuilder).MapInheritedProperties(inherit);
+
+    /// <summary>
     ///     Configures the table that the entity type maps to when targeting a relational database.
     /// </summary>
     /// <remarks>
@@ -51,7 +95,7 @@ public static class RelationalEntityTypeBuilderExtensions
     {
         Check.NotNull(buildAction, nameof(buildAction));
 
-        buildAction(new TableBuilder(entityTypeBuilder));
+        buildAction(new TableBuilder(null, null, entityTypeBuilder));
 
         return entityTypeBuilder;
     }
@@ -76,7 +120,7 @@ public static class RelationalEntityTypeBuilderExtensions
 
         entityTypeBuilder.Metadata.SetTableName(name);
         entityTypeBuilder.Metadata.SetSchema(null);
-        buildAction(new TableBuilder(entityTypeBuilder));
+        buildAction(new TableBuilder(name, null, entityTypeBuilder));
 
         return entityTypeBuilder;
     }
@@ -192,7 +236,7 @@ public static class RelationalEntityTypeBuilderExtensions
 
         entityTypeBuilder.Metadata.SetTableName(name);
         entityTypeBuilder.Metadata.SetSchema(schema);
-        buildAction(new TableBuilder(entityTypeBuilder));
+        buildAction(new TableBuilder(name, schema, entityTypeBuilder));
 
         return entityTypeBuilder;
     }
@@ -281,7 +325,7 @@ public static class RelationalEntityTypeBuilderExtensions
     {
         Check.NotNull(buildAction, nameof(buildAction));
 
-        buildAction(new OwnedNavigationTableBuilder(referenceOwnershipBuilder));
+        buildAction(new OwnedNavigationTableBuilder(null, null, referenceOwnershipBuilder));
 
         return referenceOwnershipBuilder;
     }
@@ -303,7 +347,7 @@ public static class RelationalEntityTypeBuilderExtensions
     {
         Check.NotNull(buildAction, nameof(buildAction));
 
-        buildAction(new OwnedNavigationTableBuilder<TRelatedEntity>(referenceOwnershipBuilder));
+        buildAction(new OwnedNavigationTableBuilder<TRelatedEntity>(null, null, referenceOwnershipBuilder));
 
         return referenceOwnershipBuilder;
     }
@@ -344,7 +388,7 @@ public static class RelationalEntityTypeBuilderExtensions
 
         referenceOwnershipBuilder.OwnedEntityType.SetTableName(name);
         referenceOwnershipBuilder.OwnedEntityType.SetSchema(null);
-        buildAction(new OwnedNavigationTableBuilder(referenceOwnershipBuilder));
+        buildAction(new OwnedNavigationTableBuilder(name, null, referenceOwnershipBuilder));
 
         return referenceOwnershipBuilder;
     }
@@ -371,7 +415,7 @@ public static class RelationalEntityTypeBuilderExtensions
 
         referenceOwnershipBuilder.OwnedEntityType.SetTableName(name);
         referenceOwnershipBuilder.OwnedEntityType.SetSchema(null);
-        buildAction(new OwnedNavigationTableBuilder<TRelatedEntity>(referenceOwnershipBuilder));
+        buildAction(new OwnedNavigationTableBuilder<TRelatedEntity>(name, null, referenceOwnershipBuilder));
 
         return referenceOwnershipBuilder;
     }
@@ -423,7 +467,7 @@ public static class RelationalEntityTypeBuilderExtensions
 
         referenceOwnershipBuilder.OwnedEntityType.SetTableName(name);
         referenceOwnershipBuilder.OwnedEntityType.SetSchema(schema);
-        buildAction(new OwnedNavigationTableBuilder(referenceOwnershipBuilder));
+        buildAction(new OwnedNavigationTableBuilder(name, schema, referenceOwnershipBuilder));
 
         return referenceOwnershipBuilder;
     }
@@ -472,7 +516,7 @@ public static class RelationalEntityTypeBuilderExtensions
 
         referenceOwnershipBuilder.OwnedEntityType.SetTableName(name);
         referenceOwnershipBuilder.OwnedEntityType.SetSchema(schema);
-        buildAction(new OwnedNavigationTableBuilder<TRelatedEntity>(referenceOwnershipBuilder));
+        buildAction(new OwnedNavigationTableBuilder<TRelatedEntity>(name, schema, referenceOwnershipBuilder));
 
         return referenceOwnershipBuilder;
     }

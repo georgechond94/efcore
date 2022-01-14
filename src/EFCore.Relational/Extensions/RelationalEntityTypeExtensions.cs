@@ -957,4 +957,58 @@ public static class RelationalEntityTypeExtensions
         this IConventionEntityType entityType)
         => entityType.FindAnnotation(RelationalAnnotationNames.IsTableExcludedFromMigrations)
             ?.GetConfigurationSource();
+
+    /// <summary>
+    ///     Gets a value indicating whether the inherited properties are mapped to the same table as the derived ones.
+    /// </summary>
+    /// <param name="entityType">The entity type.</param>
+    /// <returns>A value indicating whether the inherited properties are mapped to the same table as the derived ones.</returns>
+    public static bool? HasInheritedPropertyMapping(this IReadOnlyEntityType entityType)
+    {
+        var inherited = (bool?)entityType[RelationalAnnotationNames.HasInheritedPropertyMapping];
+        if (inherited != null)
+        {
+            return inherited.Value;
+        }
+
+        if (entityType.BaseType != null)
+        {
+            return entityType.GetRootType().HasInheritedPropertyMapping();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Sets a value indicating whether the inherited properties are mapped to the same table as the derived ones.
+    /// </summary>
+    /// <param name="entityType">The entity type.</param>
+    /// <param name="inherited">A value indicating whether the inherited properties are mapped to the same table as the derived ones.</param>
+    public static void SetInheritedPropertyMapping(this IMutableEntityType entityType, bool? inherited)
+        => entityType.SetOrRemoveAnnotation(RelationalAnnotationNames.HasInheritedPropertyMapping, inherited);
+
+    /// <summary>
+    ///     Sets a value indicating whether the inherited properties are mapped to the same table as the derived ones.
+    /// </summary>
+    /// <param name="entityType">The entity type.</param>
+    /// <param name="inherited">A value indicating whether the inherited properties are mapped to the same table as the derived ones.</param>
+    /// <param name="fromDataAnnotation">Indicates whether the configuration was specified using a data annotation.</param>
+    /// <returns>The configured value.</returns>
+    public static bool? SetInheritedPropertyMapping(
+        this IConventionEntityType entityType,
+        bool? inherited,
+        bool fromDataAnnotation = false)
+        => (bool?)entityType.SetOrRemoveAnnotation(
+                RelationalAnnotationNames.HasInheritedPropertyMapping, inherited, fromDataAnnotation)
+            ?.Value;
+
+    /// <summary>
+    ///     Gets the <see cref="ConfigurationSource" /> for <see cref="HasInheritedPropertyMapping" />.
+    /// </summary>
+    /// <param name="entityType">The entity type to find configuration source for.</param>
+    /// <returns>The <see cref="ConfigurationSource" /> for <see cref="HasInheritedPropertyMapping" />.</returns>
+    public static ConfigurationSource? GetHasInheritedPropertyMappingConfigurationSource(
+        this IConventionEntityType entityType)
+        => entityType.FindAnnotation(RelationalAnnotationNames.HasInheritedPropertyMapping)
+            ?.GetConfigurationSource();
 }

@@ -1726,6 +1726,188 @@ public partial class RelationalModelValidatorTest : ModelValidatorTest
     }
 
     [ConditionalFact]
+    public virtual void Passes_for_view_TPC()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>().ToTable((string)null).MapInheritedProperties();
+        modelBuilder.Entity<Cat>().ToView("Cat");
+
+        Validate(modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_MapInheritedProperties_on_derived_types()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Cat>().HasBaseType((string)null);
+        modelBuilder.Entity<Animal>();
+        modelBuilder.Entity<Cat>().ToTable("Cat").ToView("Cat").MapInheritedProperties().HasBaseType(typeof(Animal));
+
+        VerifyError(
+            RelationalStrings.NonTPHTableClash(nameof(Dog), nameof(Animal), nameof(Animal)),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_unconfigured_entity_type_in_TPC()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>().ToTable((string)null).MapInheritedProperties();
+        modelBuilder.Entity<Cat>().ToView("Cat");
+        modelBuilder.Entity<Dog>();
+
+        VerifyError(
+            RelationalStrings.NonTPHTableClash(nameof(Dog), nameof(Animal), nameof(Animal)),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_clashing_entity_types_in_views_TPC()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>().MapInheritedProperties();
+        modelBuilder.Entity<Cat>().ToTable("Cat").ToView("Cat");
+        modelBuilder.Entity<Dog>().ToTable("Dog").ToView("Cat");
+
+        VerifyError(
+            RelationalStrings.NonTPHViewClash(nameof(Dog), nameof(Cat), "Cat"),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_table_and_view_TPC_mismatch()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>().MapInheritedProperties().ToTable("Animal").ToView("Animal");
+        modelBuilder.Entity<Cat>().ToTable("Animal").ToView("Cat");
+
+        VerifyError(
+            RelationalStrings.NonTPHTableClash(nameof(Cat), nameof(Animal), "Animal"),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_TPC_with_discriminator()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>().MapInheritedProperties().HasDiscriminator<int>("Discriminator");
+        modelBuilder.Entity<Cat>().ToTable("Cat");
+
+        VerifyError(
+            RelationalStrings.TPHTableMismatch(nameof(Cat), nameof(Cat), nameof(Animal), nameof(Animal)),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_view_TPC_with_discriminator()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>().ToView("Animal").MapInheritedProperties().HasDiscriminator<int>("Discriminator");
+        modelBuilder.Entity<Cat>().ToView("Cat");
+
+        VerifyError(
+            RelationalStrings.TPHViewMismatch(nameof(Cat), nameof(Cat), nameof(Animal), nameof(Animal)),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Passes_on_valid_view_sharing_with_TPC()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+
+        modelBuilder.Entity<Animal>()
+            .MapInheritedProperties()
+            .ToView("Animal")
+            .Ignore(a => a.FavoritePerson);
+
+        modelBuilder.Entity<Cat>(
+            x =>
+            {
+                x.ToView("Cat");
+                x.HasOne(c => c.FavoritePerson).WithOne().HasForeignKey<Person>(c => c.Id);
+            });
+
+        modelBuilder.Entity<Person>().ToView("Cat");
+
+        Validate(modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_linking_relationship_on_derived_type_in_TPC()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+
+        modelBuilder.Entity<Animal>()
+            .MapInheritedProperties()
+            .Ignore(a => a.FavoritePerson);
+
+        modelBuilder.Entity<Cat>(
+            x =>
+            {
+                x.ToTable("Cat");
+                x.HasOne(c => c.FavoritePerson).WithOne().HasForeignKey<Cat>(c => c.Id);
+            });
+
+        modelBuilder.Entity<Person>().ToTable("Cat");
+
+        VerifyError(
+            RelationalStrings.IncompatibleTableDerivedRelationship(
+                "Cat", "Cat", "Person"),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_linking_relationship_on_derived_type_in_TPC_views()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+
+        modelBuilder.Entity<Animal>()
+            .MapInheritedProperties()
+            .Ignore(a => a.FavoritePerson)
+            .ToView("Animal");
+
+        modelBuilder.Entity<Cat>(
+            x =>
+            {
+                x.ToView("Cat");
+                x.HasOne(c => c.FavoritePerson).WithOne().HasForeignKey<Cat>(c => c.Id);
+            });
+
+        modelBuilder.Entity<Person>().ToView("Cat");
+
+        VerifyError(
+            RelationalStrings.IncompatibleViewDerivedRelationship(
+                "Cat", "Cat", "Person"),
+            modelBuilder);
+    }
+
+    [ConditionalFact]
+    public virtual void Detects_unmapped_foreign_keys_in_TPC()
+    {
+        var modelBuilder = CreateConventionalModelBuilder();
+        modelBuilder.Entity<Animal>()
+            .MapInheritedProperties()
+            .Ignore(a => a.FavoritePerson)
+            .Property<int>("FavoritePersonId");
+        modelBuilder.Entity<Cat>().ToTable("Cat")
+            .HasOne<Person>().WithMany()
+            .HasForeignKey("FavoritePersonId");
+
+        var definition =
+            RelationalResources.LogForeignKeyPropertiesMappedToUnrelatedTables(new TestLogger<TestRelationalLoggingDefinitions>());
+        VerifyWarning(
+            definition.GenerateMessage(
+                l => l.Log(
+                    definition.Level,
+                    definition.EventId,
+                    definition.MessageFormat,
+                    "{'FavoritePersonId'}", nameof(Cat), nameof(Person), "{'FavoritePersonId'}", nameof(Cat), "{'Id'}",
+                    nameof(Person))),
+            modelBuilder,
+            LogLevel.Error);
+    }
+
+    [ConditionalFact]
     public virtual void Passes_for_valid_table_overrides()
     {
         var modelBuilder = CreateConventionalModelBuilder();
