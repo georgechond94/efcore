@@ -1258,13 +1258,13 @@ public class RelationalModelValidator : ModelValidator
             }
             else
             {
-                ValidateTPTMapping(rootEntityType, forTables: false);
-                ValidateTPTMapping(rootEntityType, forTables: true);
+                ValidateNonTPHMapping(rootEntityType, forTables: false);
+                ValidateNonTPHMapping(rootEntityType, forTables: true);
             }
         }
     }
 
-    private static void ValidateTPTMapping(IEntityType rootEntityType, bool forTables)
+    private static void ValidateNonTPHMapping(IEntityType rootEntityType, bool forTables)
     {
         var derivedTypes = new Dictionary<(string, string?), IEntityType>();
         foreach (var entityType in rootEntityType.GetDerivedTypesInclusive())
