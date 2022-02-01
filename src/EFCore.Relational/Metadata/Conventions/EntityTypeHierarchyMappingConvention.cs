@@ -52,6 +52,7 @@ public class EntityTypeHierarchyMappingConvention : IModelFinalizingConvention
             if (entityType.HasInheritedPropertyMapping() != null)
             {
                 nonTphRoots.Add(entityType.GetRootType());
+                // Create fk for TPT
                 continue;
             }
 

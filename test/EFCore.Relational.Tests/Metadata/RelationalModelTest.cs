@@ -31,7 +31,11 @@ namespace Microsoft.EntityFrameworkCore.Metadata
         {
             if (!useExplicitMapping && mapping == Mapping.TPC)
             {
-                // throws
+                Assert.Equal(
+                    RelationalStrings.NonTPHTableClash(nameof(SpecialCustomer), nameof(Customer), nameof(Customer)),
+                Assert.Throws<InvalidOperationException>(() => CreateTestModel(mapToTables: useExplicitMapping, mapping: mapping)).Message);
+
+                return;
             }
             var model = CreateTestModel(mapToTables: useExplicitMapping, mapping: mapping);
 
@@ -40,7 +44,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             Assert.Empty(model.Views);
             Assert.True(model.Model.GetEntityTypes().All(et => !et.GetViewMappings().Any()));
 
-            AssertDefaultMappings(model);
+            AssertDefaultMappings(model, mapping);
             AssertTables(model, useExplicitMapping ? mapping : Mapping.TPH);
         }
 
@@ -57,7 +61,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             Assert.Empty(model.Tables);
             Assert.True(model.Model.GetEntityTypes().All(et => !et.GetTableMappings().Any()));
 
-            AssertDefaultMappings(model);
+            AssertDefaultMappings(model, mapping);
             AssertViews(model, mapping);
         }
 
@@ -73,12 +77,12 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             Assert.Equal(mapping == Mapping.TPH ? 3 : 5, model.Tables.Count());
             Assert.Equal(mapping == Mapping.TPH ? 3 : 5, model.Views.Count());
 
-            AssertDefaultMappings(model);
+            AssertDefaultMappings(model, mapping);
             AssertTables(model, mapping);
             AssertViews(model, mapping);
         }
 
-        private static void AssertDefaultMappings(IRelationalModel model)
+        private static void AssertDefaultMappings(IRelationalModel model, Mapping mapping)
         {
             var orderType = model.Model.FindEntityType(typeof(Order));
             var orderMapping = orderType.GetDefaultMappings().Single();
@@ -217,8 +221,18 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             var customerPk = specialCustomerType.FindPrimaryKey();
 
             Assert.False(customerView.IsOptional(customerType));
-            Assert.False(customerView.IsOptional(specialCustomerType));
-            Assert.False(customerView.IsOptional(extraSpecialCustomerType));
+            if (mapping == Mapping.TPC)
+            {
+                Assert.Equal(
+                    RelationalStrings.TableNotMappedEntityType(nameof(SpecialCustomer), customerView.Name),
+                    Assert.Throws<InvalidOperationException>(
+                        () => customerView.IsOptional(specialCustomerType)).Message);
+            }
+            else
+            {
+                Assert.False(customerView.IsOptional(specialCustomerType));
+                Assert.False(customerView.IsOptional(extraSpecialCustomerType));
+            }
 
             if (mapping == Mapping.TPT)
             {
@@ -247,17 +261,35 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             {
                 var specialCustomerViewMapping = specialCustomerType.GetViewMappings().Single();
                 Assert.True(specialCustomerViewMapping.IsSplitEntityTypePrincipal);
-                Assert.True(specialCustomerViewMapping.IncludesDerivedTypes);
-
                 var specialCustomerView = specialCustomerViewMapping.View;
-                Assert.Same(customerView, specialCustomerView);
-
-                Assert.Equal(4, specialCustomerView.EntityTypeMappings.Count());
-                Assert.True(specialCustomerView.EntityTypeMappings.First().IsSharedTablePrincipal);
-                Assert.False(specialCustomerView.EntityTypeMappings.Last().IsSharedTablePrincipal);
-
                 var specialityColumn = specialCustomerView.Columns.Single(c => c.Name == nameof(SpecialCustomer.Speciality));
-                Assert.True(specialityColumn.IsNullable);
+                if (mapping == Mapping.TPH)
+                {
+                    Assert.True(specialCustomerViewMapping.IncludesDerivedTypes);
+                    Assert.Same(customerView, specialCustomerView);
+
+                    Assert.Equal(4, specialCustomerView.EntityTypeMappings.Count());
+                    Assert.True(specialCustomerView.EntityTypeMappings.First().IsSharedTablePrincipal);
+                    Assert.False(specialCustomerView.EntityTypeMappings.Last().IsSharedTablePrincipal);
+
+                    Assert.True(specialityColumn.IsNullable);
+                }
+                else
+                {
+                    Assert.False(specialCustomerViewMapping.IncludesDerivedTypes);
+                    Assert.NotSame(customerView, specialCustomerView);
+
+                    Assert.True(customerView.EntityTypeMappings.Single().IsSharedTablePrincipal);
+                    Assert.Equal(5, customerView.Columns.Count());
+
+                    Assert.Equal(2, specialCustomerView.EntityTypeMappings.Count());
+                    Assert.True(specialCustomerView.EntityTypeMappings.First().IsSharedTablePrincipal);
+                    Assert.False(specialCustomerView.EntityTypeMappings.Last().IsSharedTablePrincipal);
+
+                    Assert.Equal(9, specialCustomerView.Columns.Count());
+
+                    Assert.False(specialityColumn.IsNullable);
+                }
             }
         }
 
@@ -638,6 +670,10 @@ namespace Microsoft.EntityFrameworkCore.Metadata
                     if (mapping == Mapping.TPC)
                     {
                         cb.MapInheritedProperties();
+                    }
+                    else if (mapping == Mapping.TPT)
+                    {
+                        cb.MapInheritedProperties(false);
                     }
 
                     // TODO: Don't map it on the "Customer" table #19811
