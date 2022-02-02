@@ -23,7 +23,7 @@ public class ObjectAccessExpression : Expression, IPrintableExpression, IAccessE
     /// </summary>
     public ObjectAccessExpression(INavigation navigation, Expression accessExpression)
     {
-        Name = navigation.TargetEntityType.GetContainingPropertyName();
+        Name = navigation.GetJsonPropertyName();
         if (Name == null)
         {
             throw new InvalidOperationException(

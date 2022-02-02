@@ -364,7 +364,7 @@ public class CosmosModelValidator : ModelValidator
                     continue;
                 }
 
-                var jsonName = navigation.TargetEntityType.GetContainingPropertyName()!;
+                var jsonName = navigation.GetJsonPropertyName();
                 if (properties.TryGetValue(jsonName, out var otherProperty))
                 {
                     throw new InvalidOperationException(

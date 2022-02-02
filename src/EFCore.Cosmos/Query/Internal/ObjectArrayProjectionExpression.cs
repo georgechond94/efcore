@@ -29,7 +29,7 @@ public class ObjectArrayProjectionExpression : Expression, IPrintableExpression,
         var targetType = navigation.TargetEntityType;
         Type = typeof(IEnumerable<>).MakeGenericType(targetType.ClrType);
 
-        Name = targetType.GetContainingPropertyName();
+        Name = navigation.GetJsonPropertyName();
         if (Name == null)
         {
             throw new InvalidOperationException(
